@@ -13,6 +13,7 @@ class MetaSingleton(type):
             cls._instances[fname] = super(MetaSingleton, cls).__call__(fname, *args, **kwargs)
         return cls._instances[fname]
 
+
 class SqLiter(metaclass=MetaSingleton):
     def __init__(self, db_file, check_same_thread=False):
         self.conn = sqlite3.connect(db_file, check_same_thread=check_same_thread)
@@ -20,7 +21,7 @@ class SqLiter(metaclass=MetaSingleton):
         self.create_tables()
 
     def create_tables(self):
-        # self.cur.execute("PRAGMA foreign_keys=on;")
+        self.cur.execute("PRAGMA foreign_keys=on;")
         self.cur.execute("""
         CREATE TABLE IF NOT EXISTS place(
         id INTEGER PRIMARY KEY,
@@ -30,47 +31,78 @@ class SqLiter(metaclass=MetaSingleton):
         self.cur.execute("""
         CREATE TABLE IF NOT EXISTS things(
         id INTEGER PRIMARY KEY,
-        thing TEXT,
+        thing TEXT NOT NULL COLLATE NOCASE,
         place_id INTEGER NOT NULL,
-        FOREIGN KEY (place_id) REFERENCES place(id)
+        FOREIGN KEY (place_id) REFERENCES place(item_id)
         );
         """)
         self.conn.commit()
 
-    def add_place(self, name):
-        self.cur.execute(
-            "INSERT INTO place(name) VALUES(?);",
-            [name]
-        )
+    def add_places(self, places):
+        for place in places:
+            self.cur.execute(
+                "INSERT INTO place(name) VALUES (?);",
+                [place]
+            )
         self.conn.commit()
 
     def places(self):
-        self.cur.execute("SELECT name, id FROM place;")
+        self.cur.execute("SELECT id, name FROM place ORDER BY name;")
         return self.cur.fetchall()
+    
+    def placename_by_id(self, place_id):
+        self.cur.execute("SELECT name FROM place WHERE id=?;", [place_id])
+        return self.cur.fetchone()
 
-    def add(self, thing, place_id):
-        self.cur.execute(
-            "INSERT INTO things(thing, place_id) VALUES(?, ?);",
-            [thing, place_id]
-        )
+    def add(self, things, place_id):
+        for thing in things:
+            self.cur.execute(
+                "INSERT INTO things(thing, place_id) VALUES(?, ?);",
+                (thing, place_id)
+            )
         self.conn.commit()
 
-    def remove(self, id):
-        self.cur.execute("DELETE FROM things WHERE id=?;", [id])
+    def remove_id(self, item_id):
+        self.cur.execute("DELETE FROM things WHERE id=?;", [item_id])
         self.conn.commit()
 
-    def search(self, num):
+    def remove_item(self, item):
+        self.cur.execute("DELETE FROM things WHERE thing=?;", [item])
+        self.conn.commit()
+
+    def search(self, item):
         self.cur.execute("""
                 SELECT thing, place.name
                 FROM things
                 LEFT JOIN place ON place_id=place.id
-                WHERE thing LIKE ?
+                WHERE LOWER(thing) LIKE ?
                 ORDER BY thing;
-                """, [f'%{num}%'])
+                """, [f'%{item}%'])
         return self.cur.fetchall()
 
+    def search_items(self, item):
+        self.cur.execute("""
+                SELECT DISTINCT thing
+                FROM things
+                WHERE LOWER(thing) LIKE ?
+                ORDER BY thing;
+                """, [f'%{item}%'])
+        return self.cur.fetchall()
+
+    def search_places(self, item):
+        self.cur.execute("""
+                SELECT place.name, COUNT(place.id)
+                FROM things
+                LEFT JOIN place ON place_id=place.id
+                WHERE LOWER(thing) = LOWER(?)
+                GROUP BY place.id
+                ORDER BY place.name;
+                """, [item])
+        return self.cur.fetchall()
+
+
 if __name__ == "__main__":
-    base = SqLiter("-1001565062242")
+    base = SqLiter("350999238")
     # base.add_place("коробка №1")
     # base.add_place("полка сверху")
     # base.add_place("полка снизу")
@@ -83,4 +115,8 @@ if __name__ == "__main__":
     # base.add("9247555", 1)
     # base.add("2323444", 2)
     # base.add("5675656", 4)
-    print(base.places())
+    print(base.search_items("65"))
+    # print(base.search_places("8116560"))
+    # print(base.places())
+    # print(base.search("Дима"))
+    # print(base.add_places(["1-2", "1-3"]))
