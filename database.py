@@ -80,6 +80,15 @@ class SqLiter(metaclass=MetaSingleton):
                 """, [f'%{item}%'])
         return self.cur.fetchall()
 
+    def all(self):
+        self.cur.execute("""
+                SELECT thing, place.name
+                FROM things
+                LEFT JOIN place ON place_id=place.id
+                ORDER BY thing;
+                """)
+        return self.cur.fetchall()
+
     def search_items(self, item):
         self.cur.execute("""
                 SELECT DISTINCT thing
