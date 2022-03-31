@@ -8,7 +8,7 @@ from telegram.ext import Updater, CallbackQueryHandler, CommandHandler, MessageH
 from telegram import InlineKeyboardMarkup, InlineKeyboardButton, Document
 from telegram.error import BadRequest
 from database import SqLiter
-from config import TOKEN, SEPARATORS, SYNONYMS, RE_ITEM_FORMAT, BAD_WORDS, BAD_WORDS_ERROR, ICONS
+from config import TOKEN, SEPARATORS, SYNONYMS, RE_ITEM_FORMAT, BAD_WORDS, BAD_WORDS_ERROR, ICONS, HELP_TEXT
 
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -34,29 +34,22 @@ def text_to_list(text: str, separators) -> list:
             word.append(letter)
 
 
-def iterable_to_text(data: (list, tuple), separators='", "') -> str:
-    return f'"{separators.join(data)}"'
-
-
 def cmd_add_item(update, context):
-    db = SqLiter(update.message.chat_id)
-    cmd, *items = text_to_list(update.message.text, SEPARATORS)
+    tg_help = "testcmdaddhelp"
+    Q = ("Куда ставить-то?", "На какое место записываю?", "Размещаю где?", "Куда?")
+    msg = update.message
+    chat_id = msg.chat_id
+    user_id = msg.from_user.id
+    data_id = f"{chat_id}{user_id}"
+    db = SqLiter(chat_id)
+    cmd, *items = text_to_list(msg.text, SEPARATORS)
     if items:
-        data_id = f"{update.message.chat_id}{update.message.from_user.id}"
         data[data_id] = items
-        keyboard = [[]]
-        max_button_len = 0
-        for place_id, name in db.places():
-            current_button_len = len(name)
-            max_button_len = current_button_len if current_button_len > max_button_len else max_button_len
-            if (len(keyboard[-1]) + 1) * max_button_len > 26:
-                keyboard.append([])
-                max_button_len = current_button_len
-            keyboard[-1].append(InlineKeyboardButton(text=name, callback_data=place_id))
-        keyboard.append([BUTTON_CANCEL])
-        update.message.reply_text(str(data[data_id]), reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard))
+        keyboard = print_place(update, context)
+        msg.reply_text(f'{", ".join(sorted(set(items)))}\n{choice(Q)}', reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard))
     else:
-        update.message.reply_text("Нужно ввести название хотя бы одного места хранения")
+        output = "\n\n".join(HELP_TEXT["cmd_add_item"])
+        msg.reply_text(f'Нужно ввести хотя бы одну запись\n\nСправка:\n{output}')
 
 
 def cmd_del_item(update, context):
@@ -73,6 +66,18 @@ def cmd_del_item(update, context):
 
 
 def cmd_add_place(update, context):
+    msg = update.message
+    db = SqLiter(msg.chat_id)
+    _, *places = text_to_list(msg.text, SEPARATORS)
+    if places:
+        db.add_places(places)
+        output = "\n".join(places)
+        msg.reply_text(f'Добавлен{"ы" if len(places) > 1 else "о"} мест{"а" if len(places) > 1 else "о"} хранения: \n{output}')
+    else:
+        msg.reply_text("Бывает...")
+
+
+def cmd_check_place(update, context):
     db = SqLiter(update.message.chat_id)
     _, *places = text_to_list(update.message.text, SEPARATORS)
     if places:
@@ -90,17 +95,30 @@ def cmd_dev_info(update, context):
 def cmd_help(update, context):
     help_text = (
         "Меня зовут Полочка! Я могу запомнить что и где лежит!",
-        "\n"
         "Управляй мной такими командами:",
-        f'/add_place МЕСТО … - добавляет МЕСТО. Cинонимы: {iterable_to_text(SYNONYMS["cmd_add_place"])}',
-        f'/add_item ОБЪЕКТ … - добавляет ОБЪЕКТ на МЕСТО. Cинонимы: {iterable_to_text(SYNONYMS["cmd_add_item"])}',
-        # '/restart - !!!не вводить!!!',
-        f'/csv - экспортирует базу. Cинонимы: {iterable_to_text(SYNONYMS["cmd_csv"])}',
-        f'/roll ОРЁЛ РЕШКА … - бросает жребий. Cинонимы: {iterable_to_text(SYNONYMS["cmd_roll"])}',
+        '',
+        f'/add_place МЕСТО … - добавляет МЕСТО.',
+        f'Вместо команды /add_place ты также можешь просто начать сообщение с: {", ".join(SYNONYMS["cmd_add_place"])}',
+        '',
+        f'/add_item ОБЪЕКТ … - добавляет ОБЪЕКТ на МЕСТО.',
+        f'Вместо команды /add_item ты также можешь просто начать сообщение с: {", ".join(SYNONYMS["cmd_add_item"])}',
+        '',
+        f'/csv - экспортирует данные в файл csv.',
+        f'Вместо команды /csv ты также можешь просто написать: {", ".join(SYNONYMS["cmd_csv"])}',
+        '',
+        f'/roll - бросает жребий.',
+        f'Вместо команды /roll ты также можешь просто начать сообщение с: {", ".join(SYNONYMS["cmd_roll"])}',
+        'Например:',
+        '➡️ /roll Федя Петя Вася = пойдёт за лимонадом',
+        '⬅ ️Пойдёт за лимонадом: Петя',
+        '',
+        f'➡ /roll Гена Жора',
+        f'⬅ Победил: Гена',
         # '/dice - выбрасывает 2 игральные кости',
         # '/dev_info - выводит информацию, достаточную для взлома вашей учётки',
+        '',
         '/help - выводит эту справку',
-        "\n",
+        '',
         "С более подробной информацией Вы можете ознакомится на странице проекта: https://github.com/bravebug/memstoragebot",
     )
     update.message.reply_text("\n".join(help_text))
@@ -117,9 +135,21 @@ def cmd_restart_service(update, context):
 
 
 def cmd_roll(update, context):
-    cmd, *names = text_to_list(update.message.text, SEPARATORS)
+    print(context.args)
+    msg = update.message.text
+    win = "Победил"
+    if "=" in msg:
+        msg, comment = msg.rsplit("=", 1)
+        comment = comment.strip()
+        if comment:
+            win = f"{comment[0].upper()}{comment[1:]}"
+    cmd, *names = text_to_list(msg.strip(), SEPARATORS)
     if names:
-        update.message.reply_text(f'Победил: {choice(names)}')
+        if len(names) == 1:
+            output = f'{names[0]}…\n…в чём тут подвох?'
+        else:
+            output = choice(names)
+        update.message.reply_text(f'{win}: {output}')
     else:
         update.message.reply_text(f'Победила дружба!')
 
@@ -129,40 +159,31 @@ def cmd_start(update, context):
 
 
 def cmd_csv(update, context):
-    db = SqLiter(update.message.chat_id)
-    fields_all = db.all()
+    msg = update.message
+    db = SqLiter(msg.chat_id)
+    fields_all = db.take_all()
     if fields_all:
         from csv import writer, QUOTE_ALL
         from io import StringIO
         from datetime import datetime
-        temp_file = StringIO()
-        fwriter = writer(temp_file, dialect="excel", delimiter=";", quotechar='"', quoting=QUOTE_ALL)
+        temp_file = StringIO(newline="")
+        fwriter = writer(temp_file, dialect="excel", delimiter=";", quotechar='"')
         fwriter.writerow(("Запись", "Место"))
-        for row in fields_all:
-            fwriter.writerow(row)
+        fwriter.writerows(fields_all)
         temp_file.seek(0)
         date = datetime.now()
-        context.bot.send_document(
-            chat_id=update.message.chat.id,
-            document=temp_file,
-            filename=f'memstoragebot--{date.strftime("%Y-%m-%d--%H-%M")}.csv'
+        msg.reply_document(
+            temp_file,
+            filename=f'memstoragebot--{date.strftime("%Y-%m-%d--%H-%M")}.csv',
         )
         temp_file.close()
         del writer, QUOTE_ALL, StringIO, datetime
     else:
-        update.message.reply_text("нет записей")
+        msg.reply_text("нет записей")
 
 
 def cmd_test(update, context):
-    pass
-    # cmd, *items = text_to_list(update.message.text, SEPARATORS)
-    # if items:
-        # keyboard = [[]]
-        # for word in items:
-            # keyboard[-1].append(InlineKeyboardButton(text=word, callback_data="Error"))
-        # update.message.reply_text("OK:", reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard))
-    # else:
-        # update.message.reply_text("Бывает...")
+    update.message.reply_text(dir(context))
 
 
 def cmd_dice(update, context):
@@ -186,7 +207,18 @@ def cmd_dice(update, context):
 def print_place(update, context):
     db = SqLiter(update.message.chat_id)
     # db.add_places(places)
-    update.message.reply_text(f'Добавлены места хранения: \n{output}')
+    keyboard = [[]]
+    max_button_len = 0
+    for place_id, name in db.places():
+        # name = num_to_emoji_replace(name)
+        current_button_len = len(name)
+        max_button_len = current_button_len if current_button_len > max_button_len else max_button_len
+        if (len(keyboard[-1]) + 1) * max_button_len > 26:
+            keyboard.append([])
+            max_button_len = current_button_len
+        keyboard[-1].append(InlineKeyboardButton(text=name, callback_data=place_id))
+    keyboard.append([BUTTON_CANCEL])
+    return keyboard
 
 
 def callback__(update, context):
@@ -202,9 +234,8 @@ def callback__(update, context):
         # print(dir())
     elif data.get(data_id):
         db.add(data[data_id], int(tmp_data))
-        items = "\n".join(data[data_id])
         update.callback_query.message.reply_text(
-            f'{items}\nдобавлены на место {db.placename_by_id(update.callback_query.data)[0]}'
+            f'{", ".join(sorted(set(data[data_id])))}\nдобавлены на место {db.placename_by_id(update.callback_query.data)[0]}'
         )
         del data[data_id]
     else:
@@ -214,7 +245,7 @@ def callback__(update, context):
 
 
 def reply(update, context):
-    rem = "Выдать"
+    rem = "Стереть"
     flag = False
     for operation in SYNONYMS:
         if flag:
@@ -225,7 +256,6 @@ def reply(update, context):
                     update.message.text = f"{synonym} {update.message.text.lstrip(synonym)}"
                 import __main__
                 __main__.__dict__.get(operation)(update, context)
-                # cmd_add_item(update, context)
                 flag = True
                 break
     if not flag:
@@ -254,21 +284,17 @@ def reply(update, context):
 def main():
     updater = Updater(TOKEN, use_context=True)
     dp = updater.dispatcher
-    commands = {
-        "add_item": cmd_add_item,
-        "add_place": cmd_add_place,
-        "csv": cmd_csv,
-        "del_item": cmd_del_item,
-        "dev_info": cmd_dev_info,
-        "dice": cmd_dice,
-        "help": cmd_help,
-        "restart": cmd_restart_service,
-        "roll": cmd_roll,
-        "start": cmd_start,
-        # "test": cmd_test,
-    }
-    for command, func in commands.items():
-        dp.add_handler(CommandHandler(command, func))
+    dp.add_handler(CommandHandler("add_item", cmd_add_item))
+    dp.add_handler(CommandHandler("add_place", cmd_add_place))
+    dp.add_handler(CommandHandler("csv", cmd_csv))
+    dp.add_handler(CommandHandler("del_item", cmd_del_item))
+    dp.add_handler(CommandHandler("dev_info", cmd_dev_info))
+    dp.add_handler(CommandHandler("dice", cmd_dice))
+    dp.add_handler(CommandHandler("help", cmd_help))
+    dp.add_handler(CommandHandler("restart", cmd_restart_service))
+    dp.add_handler(CommandHandler("roll", cmd_roll))
+    dp.add_handler(CommandHandler("start", cmd_start))
+    dp.add_handler(CommandHandler("test", cmd_test))
     dp.add_handler(CallbackQueryHandler(callback__))
     dp.add_handler(MessageHandler(Filters.text & ~Filters.command, reply))
     updater.start_polling()

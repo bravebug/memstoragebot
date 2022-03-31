@@ -80,12 +80,12 @@ class SqLiter(metaclass=MetaSingleton):
                 """, [f'%{item}%'])
         return self.cur.fetchall()
 
-    def all(self):
+    def take_all(self):
         self.cur.execute("""
                 SELECT thing, place.name
                 FROM things
                 LEFT JOIN place ON place_id=place.id
-                ORDER BY thing;
+                ORDER BY place.name, thing;
                 """)
         return self.cur.fetchall()
 
