@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import sqlite3
+# import sqlite_icu
 
 
 class MetaSingleton(type):
@@ -17,6 +18,8 @@ class MetaSingleton(type):
 class SqLiter(metaclass=MetaSingleton):
     def __init__(self, db_file, check_same_thread=False):
         self.conn = sqlite3.connect(db_file, check_same_thread=check_same_thread)
+        # self.conn.enable_load_extension(True)
+        # self.conn.load_extension(sqlite_icu.extension_path().replace('.so', ''))
         self.cur = self.conn.cursor()
         self.create_tables()
 
@@ -54,11 +57,11 @@ class SqLiter(metaclass=MetaSingleton):
         self.cur.execute("SELECT name FROM place WHERE id=?;", [place_id])
         return self.cur.fetchone()
 
-    def add(self, things, place_id):
-        for thing in things:
+    def add(self, items, place_id):
+        for item in items:
             self.cur.execute(
                 "INSERT INTO things(thing, place_id) VALUES(?, ?);",
-                (thing, place_id)
+                (item, place_id)
             )
         self.conn.commit()
 
@@ -70,12 +73,16 @@ class SqLiter(metaclass=MetaSingleton):
         self.cur.execute("DELETE FROM things WHERE thing=?;", [item])
         self.conn.commit()
 
+    def remove_items(self, items):
+        for item in items:
+            self.remove_item(item)
+
     def search(self, item):
         self.cur.execute("""
                 SELECT thing, place.name
                 FROM things
                 LEFT JOIN place ON place_id=place.id
-                WHERE LOWER(thing) LIKE ?
+                WHERE LOWER(thing) LIKE LOWER(?)
                 ORDER BY thing;
                 """, [f'%{item}%'])
         return self.cur.fetchall()
@@ -89,13 +96,16 @@ class SqLiter(metaclass=MetaSingleton):
                 """)
         return self.cur.fetchall()
 
-    def search_items(self, item):
+    def inaccurate_search(self, item):
+        return self.accurate_search(f"%{item}%")
+
+    def accurate_search(self, item):
         self.cur.execute("""
                 SELECT DISTINCT thing
                 FROM things
-                WHERE LOWER(thing) LIKE ?
+                WHERE LOWER(thing) LIKE LOWER(?)
                 ORDER BY thing;
-                """, [f'%{item}%'])
+                """, [item])
         return self.cur.fetchall()
 
     def search_places(self, item):
@@ -124,7 +134,7 @@ if __name__ == "__main__":
     # base.add("9247555", 1)
     # base.add("2323444", 2)
     # base.add("5675656", 4)
-    print(base.search_items("65"))
+    print(base.accurate_search("8243427"))
     # print(base.search_places("8116560"))
     # print(base.places())
     # print(base.search("Дима"))
