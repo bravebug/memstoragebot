@@ -1,0 +1,3 @@
+python-telegram-bot
+sqlite3
+sqlite_icu
