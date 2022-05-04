@@ -11,8 +11,10 @@ from config import TOKEN, SEPARATORS, SYNONYMS, RE_ITEM_FORMAT, BAD_WORDS, BAD_W
 from datasaver import DataSaver
 from typing import Iterable, IO, Generator
 from csv import writer
-from io import StringIO
+from io import StringIO, BytesIO
 from datetime import datetime
+from speech_recognition_vosk import speech_to_text
+from functools import cache
 
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -54,13 +56,14 @@ def generate_csv(csv_file: IO, data: Iterable, header_row: Iterable) -> IO:
 
 
 def generate_keyboard(data: Iterable, limit_row_length: int = 24):
-    '''generates a keyboard that makes optimal use of screen space'''
+    """generates a keyboard that makes optimal use of screen space"""
     keyboard = [[]]
     max_button_len = 0
     for data_id, name in data:
         current_button_len = len(name)
         max_button_len = current_button_len if current_button_len > max_button_len else max_button_len
-        if (len(keyboard[-1]) + 1) * max_button_len > limit_row_length:
+        kb_len = len(keyboard[-1])
+        if kb_len > 4 or kb_len * max_button_len > limit_row_length:
             keyboard.append([])
             max_button_len = current_button_len
         keyboard[-1].append(InlineKeyboardButton(text=name, callback_data=data_id))
@@ -69,31 +72,23 @@ def generate_keyboard(data: Iterable, limit_row_length: int = 24):
 
 
 def cmd_add_item(update, context):
-    questions = (
-        "Куда ставить-то?",
-        "На какое место записываю?",
-        "Размещаю где?",
-        "Куда?",
-    )
     msg = update.message
     db = SqLiter(msg.chat_id)
     _, *items = text_to_list(msg.text, SEPARATORS)
     places = db.places()
     if places:
         if items:
-            saver = DataSaver(
-                msg.chat_id,
-                msg.from_user.id,
-                msg.message_id,
-            )
-            saver.save(
-                db.add,
-                [items],
-                "Добавила",
-            )
+            saver = saver_obj(msg.chat_id, msg.from_user.id, msg.message_id)
+            saver.func = db.add_items
+            saver.data.append(items)
+            saver.output_ok = "{items}\nдобавила на место {place}"
+            saver.output_ok_data_name = "place"
+            saver.output_ok_data_func = db.placename_by_id
+            items_text = "\n".join(items)
+            saver.output_ok_data.update({"items": items_text})
             keyboard = generate_keyboard(places)
             msg.reply_text(
-                choice(questions),
+                "На какое место отнести?",
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard),
                 reply_to_message_id=msg.message_id,
             )
@@ -105,41 +100,33 @@ def cmd_add_item(update, context):
         msg.reply_text(f'Не заданы места хранения\n\nСправка:\n{output}')
 
 
+@cache
+def saver_obj(ci, ui, mi):
+    return DataSaver(ci, ui, mi)
+
+
 def cmd_add_place(update, context):
     msg = update.message
     db = SqLiter(msg.chat_id)
     _, *places = text_to_list(msg.text, SEPARATORS)
     if places:
-        saver = DataSaver(
-            msg.chat_id,
-            msg.from_user.id,
-            msg.message_id,
-        )
-        saver.save(
-            db.add_places,
-            [places],
-            "Добавила",
-        )
+        saver = saver_obj(msg.chat_id, msg.from_user.id, msg.message_id)
+        saver.func = db.add_places
+        saver.data.append(places)
+        saver.output_ok = "Добавила мест{suffix} хранения: {places}"
+        places_text = "\n".join(places)
+        saver.output_ok_data.update({"places": places_text})
+        suffix = "о" if len(places) == 1 else "а"
+        saver.output_ok_data.update({"suffix": suffix})
         keyboard = [KEYBOARD_OK_CANCEL]
         msg.reply_text(
-            f'Добавляю новые места хранения?',
+            f'{places_text}\nдобавляю мест{suffix} хранения?',
             reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard),
             reply_to_message_id=msg.message_id,
         )
     else:
         output = "\n\n".join(HELP_TEXT["cmd_add_place"])
         msg.reply_text(f'Нужно ввести хотя бы одно место хранения\n\nСправка:\n{output}')
-
-
-def cmd_check_place(update, context):
-    db = SqLiter(update.message.chat_id)
-    _, *places = text_to_list(update.message.text, SEPARATORS)
-    if places:
-        db.add_places(places)
-        output = "\n".join(places)
-        update.message.reply_text(f'Добавлен{"ы" if len(places) > 1 else "о"} мест{"а" if len(places) > 1 else "о"} хранения: \n{output}')
-    else:
-        update.message.reply_text("Бывает...")
 
 
 def cmd_dev_info(update, context):
@@ -168,24 +155,13 @@ def cmd_help(update, context):
         '',
         f'➡ /roll Гена Жора',
         f'⬅ Победил: Гена',
-        # '/dice - выбрасывает 2 игральные кости',
-        # '/dev_info - выводит информацию, достаточную для взлома вашей учётки',
         '',
         '/help - выводит эту справку',
         '',
-        "С более подробной информацией Вы можете ознакомится на странице проекта: https://github.com/bravebug/memstoragebot",
+        ("С более подробной информацией Вы можете ознакомится на странице проекта: "
+         "https://github.com/bravebug/memstoragebot"),
     )
     update.message.reply_text("\n".join(help_text))
-
-
-def cmd_restart_service(update, context):
-    if update.message.from_user.id == 350999238:
-        import subprocess
-
-        update.message.reply_text("Будет исполнено...")
-        subprocess.run("sudo supervisorctl restart polochka".split())
-    else:
-        update.message.reply_text("Ай! Не делай так больше...")
 
 
 def cmd_roll(update, context):
@@ -231,21 +207,16 @@ def cmd_del_item(update, context):
     msg = update.message
     db = SqLiter(msg.chat_id)
     cmd, *items = text_to_list(update.message.text, SEPARATORS)
-    items = set(items)
-    items_checked = {item for item in items if db.accurate_search(item)}
-    if items_checked:
-        saver = DataSaver(
-            msg.chat_id,
-            msg.from_user.id,
-            msg.message_id
-        )
-        saver.save(
-            db.remove_items,
-            [items_checked],
-            f"Аннигилировала",
-        )
+    items = {item for item in set(items) if db.accurate_search(item)}
+    if items:
+        saver = saver_obj(msg.chat_id, msg.from_user.id, msg.message_id)
+        saver.func = db.remove_items
+        saver.data.append(items)
+        saver.output_ok = "{items}\nаннигилировала"
+        items_text = "\n".join(items)
+        saver.output_ok_data.update({"items": items_text})
         msg.reply_text(
-            'Будут удалены сразу отовсюду! Ок?',
+            f'{items_text}\nбудут удалены сразу отовсюду! Ок?',
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[KEYBOARD_OK_CANCEL]),
             reply_to_message_id=msg.message_id,
         )
@@ -259,15 +230,13 @@ def callback__(update, context):
     msg_id = msg.reply_to_message.message_id
     db = SqLiter(chat_id)
     _, *items = text_to_list(msg.text, SEPARATORS)
-    saver = DataSaver(
-        chat_id,
-        user_id,
-        msg_id,
-    )
-    db = SqLiter(msg.chat_id)
+    saver = saver_obj(chat_id, user_id, msg_id)
+    db = SqLiter(chat_id)
     tmp_data = query.data
     if tmp_data != "cancel":
         if tmp_data != "accept":
+            if saver.output_ok_data_func:
+                saver.output_ok_data.update({saver.output_ok_data_name: saver.output_ok_data_func(tmp_data)})
             saver.data.append(tmp_data)
         msg.edit_text(saver.execute())
     else:
@@ -276,20 +245,20 @@ def callback__(update, context):
 
 def reply(update, context):
     rem = "Стереть"
+    msg = update.message
     flag = False
     for operation in SYNONYMS:
         if flag:
             break
         for synonym in SYNONYMS[operation]:
-            if update.message.text.lower().startswith(synonym.lower()):
+            if msg.text.lower().startswith(synonym.lower()):
                 if not synonym.endswith(" "):
-                    update.message.text = f"{synonym} {update.message.text.lstrip(synonym)}"
+                    msg.text = f"{synonym} {msg.text.lstrip(synonym)}"
                 import __main__
                 __main__.__dict__.get(operation)(update, context)
                 flag = True
                 break
     if not flag:
-        msg = update.message
         db = SqLiter(msg.chat_id)
         try:
             for search_word in set(text_to_list(msg.text, SEPARATORS)):
@@ -297,16 +266,11 @@ def reply(update, context):
                 if 0 < len(search_set) <= 1:
                     for item in search_set:
                         places = "\n".join([f'{ICONS["box"] * y} ➔ {x}' for x, y in db.search_places(item)])
-                        saver = DataSaver(
-                            msg.chat_id,
-                            msg.from_user.id,
-                            msg.message_id,
-                        )
-                        saver.save(
-                            db.remove_item,
-                            [item],
-                            f"{item}\nУдалила",
-                        )
+                        saver = saver_obj(msg.chat_id, msg.from_user.id, msg.message_id)
+                        saver.func = db.remove_item
+                        saver.data.append(item)
+                        saver.output_ok = "{item}\nУдалила"
+                        saver.output_ok_data.update({"item": item})
                         markup = InlineKeyboardMarkup(inline_keyboard=[
                             [
                                 InlineKeyboardButton(
@@ -331,6 +295,17 @@ def reply(update, context):
             msg.reply_text(choice(BAD_WORDS_ERROR))
 
 
+def reply_voice(update, context):
+    msg = update.message
+    input_file = BytesIO()
+    update.message.voice.get_file().download(out=input_file)
+    recognized_text = speech_to_text(input_file)
+    if recognized_text:
+        msg.reply_text(recognized_text)
+        # update.message.text = recognized_text
+        # reply(update, context)
+
+
 def main():
     updater = Updater(TOKEN, use_context=True)
     dp = updater.dispatcher
@@ -340,11 +315,12 @@ def main():
     dp.add_handler(CommandHandler("del_item", cmd_del_item))
     dp.add_handler(CommandHandler("dev_info", cmd_dev_info))
     dp.add_handler(CommandHandler("help", cmd_help))
-    dp.add_handler(CommandHandler("restart", cmd_restart_service))
     dp.add_handler(CommandHandler("roll", cmd_roll))
     dp.add_handler(CommandHandler("start", cmd_start))
     dp.add_handler(CallbackQueryHandler(callback__, pass_chat_data=True))
     dp.add_handler(MessageHandler(Filters.text & ~Filters.command, reply))
+    dp.add_handler(MessageHandler(Filters.voice, reply_voice))
+    # dp.add_handler(MessageHandler(Filters.voice, reply))
     updater.start_polling()
     updater.idle()
 

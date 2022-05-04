@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import sqlite3
-# import sqlite_icu
+import sqlite_icu
 
 
 class MetaSingleton(type):
@@ -18,8 +18,8 @@ class MetaSingleton(type):
 class SqLiter(metaclass=MetaSingleton):
     def __init__(self, db_file, check_same_thread=False):
         self.conn = sqlite3.connect(db_file, check_same_thread=check_same_thread)
-        # self.conn.enable_load_extension(True)
-        # self.conn.load_extension(sqlite_icu.extension_path().replace('.so', ''))
+        self.conn.enable_load_extension(True)
+        self.conn.load_extension(sqlite_icu.extension_path().rstrip('.so'))
         self.cur = self.conn.cursor()
         self.create_tables()
 
@@ -41,13 +41,16 @@ class SqLiter(metaclass=MetaSingleton):
         """)
         self.conn.commit()
 
+    def add_place(self, place):
+        self.cur.execute(
+            "INSERT INTO place(name) VALUES (?);",
+            [place]
+        )
+        self.conn.commit()
+
     def add_places(self, places):
         for place in places:
-            self.cur.execute(
-                "INSERT INTO place(name) VALUES (?);",
-                [place]
-            )
-        self.conn.commit()
+            self.add_place(place)
 
     def places(self):
         self.cur.execute("SELECT id, name FROM place ORDER BY name;")
@@ -55,15 +58,19 @@ class SqLiter(metaclass=MetaSingleton):
     
     def placename_by_id(self, place_id):
         self.cur.execute("SELECT name FROM place WHERE id=?;", [place_id])
-        return self.cur.fetchone()
+        return self.cur.fetchone()[0]
 
-    def add(self, items, place_id):
-        for item in items:
-            self.cur.execute(
-                "INSERT INTO things(thing, place_id) VALUES(?, ?);",
-                (item, place_id)
-            )
+    def add_item(self, item, place_id):
+        self.cur.execute(
+            "INSERT INTO things(thing, place_id) VALUES(?, ?);",
+            (item, place_id)
+        )
         self.conn.commit()
+        return item
+
+    def add_items(self, items, place_id):
+        for item in items:
+            self.add_item(item, place_id)
 
     def remove_id(self, item_id):
         self.cur.execute("DELETE FROM things WHERE id=?;", [item_id])

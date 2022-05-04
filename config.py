@@ -75,15 +75,15 @@ HELP_TEXT = {
             f'➡ /roll Гена Жора',
             f'⬅ Победил: Гена',
         ),
-        # '/dice - выбрасывает 2 игральные кости',
-        # '/dev_info - выводит информацию, достаточную для взлома вашей учётки',
         "cmd_help": (
             '/help - выводит эту справку',
-            "С более подробной информацией Вы можете ознакомится на странице проекта: https://github.com/bravebug/memstoragebot",
+            ("С более подробной информацией Вы можете ознакомится на странице проекта: "
+             "https://github.com/bravebug/memstoragebot"),
         ),
     }
 
 TOKEN = os.environ["TOKEN"]
 
 
-# print(dir(__main__))
+if __name__ == "__main__":
+    print("\n\n".join("\n".join(text) for text in HELP_TEXT.values()))
