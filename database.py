@@ -9,7 +9,7 @@ class MetaSingleton(type):
     _instances = {}
 
     def __call__(cls, chat_id, *args, **kwargs):
-        fname = f"database_id{chat_id}.db"
+        fname = f"db/database_id{chat_id}.db"
         if fname not in cls._instances:
             cls._instances[fname] = super(MetaSingleton, cls).__call__(fname, *args, **kwargs)
         return cls._instances[fname]

@@ -25,7 +25,6 @@ class DataSaver:
         self.output_cancel = "Операция отменена"
 
     def execute(self):
-        print(self.output_ok_data)
         output = self.output_ok.format(**self.output_ok_data)
         self.func(*self.data)
         self.clear()
