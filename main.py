@@ -13,7 +13,7 @@ from typing import Iterable, IO, Generator
 from csv import writer
 from io import StringIO, BytesIO
 from datetime import datetime
-from speech_recognition_vosk import speech_to_text
+from speech_recognition_vosk import Recognizer
 from functools import cache
 
 
@@ -299,7 +299,8 @@ def reply_voice(update, context):
     msg = update.message
     input_file = BytesIO()
     update.message.voice.get_file().download(out=input_file)
-    recognized_text = speech_to_text(input_file)
+    rec = Recognizer(input_file)
+    recognized_text = rec.to_text()
     if recognized_text:
         msg.reply_text(recognized_text)
         # update.message.text = recognized_text
