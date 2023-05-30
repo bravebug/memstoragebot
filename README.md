@@ -21,7 +21,7 @@
 git clone https://github.com/bravebug/memstoragebot.git && cd memstoragebot
 ```
 
-2. Создание вируального окружения и его активация
+2. Создание виртуального окружения и его активация
 ```bash
 python3 -m venv venv && source venv/bin/activate
 ```
