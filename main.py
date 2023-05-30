@@ -1,20 +1,21 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import logging
+from config import TOKEN, SEPARATORS, SYNONYMS, RE_ITEM_FORMAT, BAD_WORDS, BAD_WORDS_ERROR, ICONS, HELP_TEXT
+from csv import writer
+from database import SqLiter
+from datasaver import DataSaver
+from datetime import datetime
+from functools import cache
+from io import StringIO, BytesIO
 from random import choice
-from telegram.ext import Updater, CallbackQueryHandler, CommandHandler, MessageHandler, Filters
+from speech_recognition_vosk import speech_to_text
 from telegram import InlineKeyboardMarkup, InlineKeyboardButton, Document
 from telegram.error import BadRequest
-from database import SqLiter
-from config import TOKEN, SEPARATORS, SYNONYMS, RE_ITEM_FORMAT, BAD_WORDS, BAD_WORDS_ERROR, ICONS, HELP_TEXT
-from datasaver import DataSaver
+from telegram.ext import Updater, CallbackQueryHandler, CommandHandler, MessageHandler, Filters
 from typing import Iterable, IO, Generator
-from csv import writer
-from io import StringIO, BytesIO
-from datetime import datetime
-from speech_recognition_vosk import speech_to_text
-from functools import cache
+import logging
+import re
 
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -261,7 +262,8 @@ def reply(update, context):
     if not flag:
         db = SqLiter(msg.chat_id)
         try:
-            for search_word in set(text_to_list(msg.text, SEPARATORS)):
+            orders = (s for s in set(text_to_list(msg.text, SEPARATORS)) if re.match(r"[\d]{4,8}", s))
+            for search_word in orders:
                 search_set = [x[0] for x in db.inaccurate_search(search_word)]
                 if 0 < len(search_set) <= 1:
                     for item in search_set:
