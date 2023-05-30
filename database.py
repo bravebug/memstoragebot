@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import sqlite3
-import sqlite_icu
+# import sqlite_icu
 
 
 class MetaSingleton(type):
@@ -18,8 +18,8 @@ class MetaSingleton(type):
 class SqLiter(metaclass=MetaSingleton):
     def __init__(self, db_file, check_same_thread=False):
         self.conn = sqlite3.connect(db_file, check_same_thread=check_same_thread)
-        self.conn.enable_load_extension(True)
-        self.conn.load_extension(sqlite_icu.extension_path().rstrip('.so'))
+        # self.conn.enable_load_extension(True)
+        # self.conn.load_extension(sqlite_icu.extension_path().rstrip('.so'))
         self.cur = self.conn.cursor()
         self.create_tables()
 
@@ -55,7 +55,7 @@ class SqLiter(metaclass=MetaSingleton):
     def places(self):
         self.cur.execute("SELECT id, name FROM place ORDER BY name;")
         return self.cur.fetchall()
-    
+
     def placename_by_id(self, place_id):
         self.cur.execute("SELECT name FROM place WHERE id=?;", [place_id])
         return self.cur.fetchone()[0]
