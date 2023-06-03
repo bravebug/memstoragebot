@@ -12,21 +12,21 @@ class DataBase:
     def __init__(self, database_uri, echo, deployment_key, clear_text: Callable = lambda s: s):
         self.Session = create_session(database_uri=database_uri, echo=echo)
         self.clear_text = clear_text
-        deployment_key_binary = str(deployment_key).encode()
-        temp_h = blake2s(digest_size=8)
-        temp_h.update(deployment_key_binary)
-        self.h = blake2s(person=temp_h.digest())
+        self.deployment_key_digest = blake2s(
+            str(deployment_key).encode(),
+            digest_size=8,
+        ).digest()
 
     @lru_cache
     def hasher(self, identifier):
-        self.h.update(str(identifier).encode())
-        return self.h.hexdigest()
+        return blake2s(
+            str(identifier).encode(),
+            person=self.deployment_key_digest,
+        ).hexdigest()
 
     def __get_or_add_item(self, params: dict, model: [Description, Location, Thing], session):
         try:
             item = session.query(model).filter_by(**params).one()
-            # if getattr(item, "last_queried", None):
-                # item.last_queried = datetime.utcnow()
             item.last_queried = datetime.utcnow()
         except NoResultFound:
             item = model(**params)

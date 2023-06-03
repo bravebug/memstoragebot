@@ -372,9 +372,7 @@ async def generate_csv(csv_file: IO, data: Iterable, header_row: Iterable) -> IO
 @dp.message_handler(Text(equals=MESSAGES['csv_hot_words'].split(), ignore_case=True))
 async def export_csv(message: types.Message):
     if data := db.search_entries(instance_name=message.chat.id):
-        print(data)
         data = ((i,) + d[1:] for i, d in enumerate(data, start=1))
-        print(data)
         with StringIO(newline="") as csv_file:
             csv_file = await generate_csv(
                 csv_file,
