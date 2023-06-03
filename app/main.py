@@ -8,7 +8,7 @@ from aiogram.dispatcher.filters import Command, Text
 from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.types import BotCommand
 from aiogram.types.input_file import InputFile
-from config import ProductionConfig as Config
+from config import make_config
 from csv import writer
 from database import DataBase
 from datetime import datetime
@@ -20,12 +20,13 @@ from storage import TempSorage
 from typing import IO, Iterable
 from utils import split_asterisk_and_sharp
 from utils import remove_extra_spaces as clear_text
+import inspect
 import re
 
 import pdb
 
 logging.basicConfig(level=logging.INFO)
-conf = Config()
+conf = make_config()
 bot = Bot(token=conf.TOKEN, parse_mode="HTML")
 db = DataBase(
         database_uri=conf.SQLALCHEMY_DATABASE_URI,
@@ -89,12 +90,12 @@ async def cancel_handler(message: types.Message, state: FSMContext):
 
 @dp.message_handler(commands=['start', 'help'])
 async def start(message: types.Message):
-    await message.answer("\n".join(conf.HELP_TEXT))
+    await message.answer("\n".join(MESSAGES['help_text']))
 
 
 @dp.message_handler(commands=['about'])
 async def about(message: types.Message):
-    await message.answer("\n".join(conf.ABOUT_TEXT))
+    await message.answer("\n".join(MESSAGES['about_text']))
 
 
 async def manage_location(message: types.Message, state: FSMContext, location):
@@ -371,6 +372,9 @@ async def generate_csv(csv_file: IO, data: Iterable, header_row: Iterable) -> IO
 @dp.message_handler(Text(equals=MESSAGES['csv_hot_words'].split(), ignore_case=True))
 async def export_csv(message: types.Message):
     if data := db.search_entries(instance_name=message.chat.id):
+        print(data)
+        data = ((i,) + d[1:] for i, d in enumerate(data, start=1))
+        print(data)
         with StringIO(newline="") as csv_file:
             csv_file = await generate_csv(
                 csv_file,
@@ -493,7 +497,7 @@ async def search(message: types.Message):
                     )
             else:
                 await message.reply(
-                    text=conf.MSG_NOT_FOUND,
+                    text=MESSAGES['thing_not_found'],
                     )
 
 
@@ -505,10 +509,10 @@ async def callback_handler(callback: types.CallbackQuery):
         output = None
         kb = None
         if action:
-            try:
-                output, kb = action()
-            except TypeError:
+            if inspect.iscoroutinefunction(action):
                 output, kb = await action()
+            else:
+                output, kb = action()
             if output or kb:
                 await callback.message.edit_text(
                     text=output,
