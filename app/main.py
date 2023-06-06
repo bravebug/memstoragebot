@@ -78,7 +78,7 @@ async def setup_bot_commands(dispatcher):
     await bot.set_my_commands(bot_commands)
 
 
-@dp.message_handler(Text(equals=MESSAGES["cancel"], ignore_case=True), state='*')
+@dp.message_handler(Text(equals=BUTTON_CANCEL_TEXT, ignore_case=True), state='*')
 async def cancel_handler(message: types.Message, state: FSMContext):
     current_state = await state.get_state()
     await state.finish()
@@ -114,6 +114,14 @@ async def manage_location(message: types.Message, state: FSMContext, location):
                 text=MESSAGES['rename_location'],
                 callback_data=batch.add(
                     partial(rename_location_start, message, state, location=location)
+                )
+            )
+        )
+        kb.insert(
+            types.InlineKeyboardButton(
+                text=MESSAGES['remove_location'],
+                callback_data=batch.add(
+                    partial(remove_location, message, state, location=location)
                 )
             )
         )
@@ -184,7 +192,7 @@ async def add_location_start(message: types.Message, state: FSMContext):
         await message.reply(
             text=MESSAGES["send_new_name_or_names_locations"],
             reply_markup=types.ReplyKeyboardMarkup(
-                [[MESSAGES["cancel"]]],
+                [[BUTTON_CANCEL_TEXT]],
                 resize_keyboard=True,
                 one_time_keyboard=True,
                 selective=True,
@@ -220,12 +228,42 @@ async def rename_location_start(message: types.Message, state: FSMContext, locat
         data['id'] = _id
     output = MESSAGES['send_new_name'].format(location_name=name)
     kb = types.ReplyKeyboardMarkup(
-        [[MESSAGES["cancel"]]],
+        [[BUTTON_CANCEL_TEXT]],
         resize_keyboard=True,
         one_time_keyboard=True,
         selective=True,
     )
     await message.reply(text=output, reply_markup=kb)
+    return None, None
+
+
+async def remove_location(message: types.Message, state: FSMContext, location):
+    kb = types.InlineKeyboardMarkup(row_width=2)
+    with temp_storage.batch(message.chat.id, message.from_id) as batch:
+        kb.insert(
+            types.InlineKeyboardButton(
+                text=BUTTON_OK_TEXT,
+                callback_data=batch.add(
+                    partial(
+                        action_with_output,
+                        partial(db.remove_location_by_id, location_id=location[0]),
+                f'{MESSAGES["successful_action_icon"]} {MESSAGES["location_removed"].format(location_name=location[1])}!',
+            ),
+        ),
+            )
+        )
+        kb.insert(
+            types.InlineKeyboardButton(
+                text=BUTTON_CANCEL_TEXT,
+                callback_data=batch.add(
+                    partial(action_with_output, None, MESSAGES['cancelled'])
+                )
+            )
+        )
+    await message.reply(
+        text='Удаляю расположение вместе со всеми объектами на нём?',
+        reply_markup=kb,
+    )
     return None, None
 
 
@@ -335,7 +373,7 @@ async def add_entry_start(message: types.Message, state: FSMContext):
         await message.reply(
             text=MESSAGES['send_new_name_or_names_things'],
             reply_markup=types.ReplyKeyboardMarkup(
-                [[MESSAGES["cancel"]]],
+                [[BUTTON_CANCEL_TEXT]],
                 resize_keyboard=True,
                 one_time_keyboard=True,
                 selective=True,

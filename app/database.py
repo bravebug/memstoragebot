@@ -145,6 +145,12 @@ class DataBase:
             stmt = delete(Entry).where(Entry.location_id == location_id)
             return session.execute(stmt)
 
+    def remove_location_by_id(self, location_id):
+        self.remove_entries_by_location_id(location_id)
+        with self.Session.begin() as session:
+            stmt = delete(Location).where(Location.id == location_id)
+            return session.execute(stmt)
+
 
 if __name__ == "__main__":
     from random import randint, choice
@@ -180,7 +186,7 @@ if __name__ == "__main__":
             # print(item)
         for name, i in tmp:
             db.add_entries(
-                things=((f"11{randint(000000,999999)}", randint(1,4), choice(example_descriptions)), ),
+                things=((f"11{randint(000000, 999999)}", randint(1,4), choice(example_descriptions)), ),
                 location_id=i,
                 instance_name="test",
             )
