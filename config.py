@@ -29,7 +29,6 @@ class Config:
     RE_ITEM_ADD_FORMAT = r'^[\d]{7,8}$'
     RE_ITEM_SEARCH_FORMAT = r'^[\d]{4,8}$'
     SEPARATORS = r'[,;\n\t]'
-    NAME_CHARS = r'[\w_-]+'
 
 
 class DevelopmentConfig(Config):

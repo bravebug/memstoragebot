@@ -42,7 +42,6 @@ input_state = {}
 ITEM_NAME_ADD_PATTERN = re.compile(conf.RE_ITEM_ADD_FORMAT)
 ITEM_NAME_SEARCH_PATTERN = re.compile(conf.RE_ITEM_SEARCH_FORMAT)
 SEPARATORS = re.compile(conf.SEPARATORS)
-NAME_CHARS = re.compile(conf.NAME_CHARS)
 
 BUTTON_CANCEL_TEXT = f'{MESSAGES["cancel_icon"]} {MESSAGES["cancel"]}'
 BUTTON_OK_TEXT = f'{MESSAGES["successful_action_icon"]} {MESSAGES["ok"]}'
@@ -168,7 +167,9 @@ async def manage_locations(message: types.Message, state: FSMContext):
 
 @dp.message_handler(state=OrderLocation.waiting_for_input)
 async def add_location_process(message: types.Message, state: FSMContext):
-    if names := re.findall(NAME_CHARS, message.get_args() if message.is_command() else message.text.lstrip('++')):
+    if not (names := re.split(SEPARATORS, message.get_args() if message.is_command() else message.text.lstrip('++'))):
+        return await message.reply(MESSAGES['try_again'])
+    else:
         for name in names:
             if name := clear_text(name):
                 db.add_location(name, message.chat.id)
@@ -178,8 +179,6 @@ async def add_location_process(message: types.Message, state: FSMContext):
             reply_markup=types.ReplyKeyboardRemove(),
         )
         await state.finish()
-    else:
-        return await message.reply(MESSAGES['try_again'])
 
 
 @dp.message_handler(Command(commands=['add_location'], ignore_case=True), state='*')
@@ -299,7 +298,7 @@ async def add_entry_process(message: types.Message, state: FSMContext):
     if not db.get_locations(message.chat.id):
         await message.reply(MESSAGES['need_location_msg'])
     else:
-        if not (entries := re.split(SEPARATORS, message.get_args() or message.text.lstrip('+'))):
+        if not (entries := re.split(SEPARATORS, message.get_args() if message.is_command() else message.text.lstrip('+'))):
             await message.reply(MESSAGES['try_again'])
         else:
             correct_entries = []
@@ -435,18 +434,17 @@ async def export_csv(message: types.Message):
 @dp.message_handler(commands=['roll'])
 @dp.message_handler(Text(startswith=['roll'], ignore_case=True))
 async def cmd_roll(message: types.Message):
-    if msg := (message.get_args() or message.text.lstrip("roll")):
-        win = MESSAGES["win"]
-        if "=" in msg:
-            msg, comment = msg.rsplit("=", 1)
-            comment = comment.strip().title()
-        cmd, *names = re.split(SEPARATORS, msg)
+    if msg := (message.get_args() if message.is_command() else message.text.lstrip('roll')):
+        win_msg = MESSAGES['win']
+        if '=' in msg:
+            msg, win_msg = msg.rsplit('=', 1)
+        names = re.split(SEPARATORS, msg)
         if names:
             if len(names) == 1:
                 output = MESSAGES['choosing_from_one'].format(name=names[0])
             else:
                 output = choice(names)
-            await message.reply(text=f'{comment}: {output}')
+            await message.reply(text=f'{win_msg.strip().upper()}: {output}')
         else:
             await message.reply(text=MESSAGES['friendship_won'])
 
