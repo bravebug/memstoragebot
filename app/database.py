@@ -97,11 +97,6 @@ class DataBase:
             query = query.order_by(LocationName.name)
             return session.execute(query).all()
 
-    def update_thing(self, thing_name):
-        with self.Session.begin() as session:
-            thing = self.__get_or_add_item(params=dict(name=thing_name), model=Thing, session=session)
-            session.add(thing)
-
     def search_things(self, search_string, instance_name):
         instance_name = self.hasher(instance_name)
         with self.Session.begin() as session:
@@ -114,7 +109,7 @@ class DataBase:
             query = query.group_by(Thing.name)
             return session.execute(query).fetchall()
 
-    def search_entries(self, instance_name, equals=None, like=None):
+    def search_entries(self, instance_name, equals=None, like=None, location_id=None):
         instance_name = self.hasher(instance_name)
         if not (equals and like):
             with self.Session.begin() as session:
@@ -131,6 +126,8 @@ class DataBase:
                     query = query.where(Thing.name == equals)
                 if like:
                     query = query.where(Thing.name.ilike(f"%{like}%"))
+                if location_id:
+                    query = query.where(Location.id == location_id)
                 return session.execute(query).fetchall()
         else:
             raise ValueError("It is acceptable to use only one of the arguments: equals or like")
@@ -150,6 +147,24 @@ class DataBase:
         with self.Session.begin() as session:
             stmt = delete(Location).where(Location.id == location_id)
             return session.execute(stmt)
+
+    def move_entries(self, location_to_id, entry_ids=None, location_from_id=None):
+        with self.Session.begin() as session:
+            entries = session.query(Entry).filter(Entry.location_id == location_from_id)
+            if location_from_id:
+                entries = entries.filter(Entry.location_id == location_from_id)
+            if entry_ids:
+                entries = entries.filter(Entry.id.in_(entry_ids))
+            for entry in entries:
+                new_entry = self.add_entry(
+                    thing_name = entry.thing.name,
+                    quantity = entry.quantity,
+                    description_text = entry.description.text if entry.description else None,
+                    location_id = location_to_id,
+                    instance_name = entry.instance.name,
+                    session = session,
+                )
+            entries.delete()
 
 
 if __name__ == "__main__":
@@ -184,17 +199,20 @@ if __name__ == "__main__":
         print(tmp)
         # for item in db.get_locations():
             # print(item)
-        for name, i in tmp:
+        for _ in range(30):
+            location_name, location_id = choice(tmp)
+            desc = None if randint(0,1) else choice(example_descriptions)
             db.add_entries(
-                things=((f"11{randint(000000, 999999)}", randint(1,4), choice(example_descriptions)), ),
-                location_id=i,
+                things=((f"115{randint(00000, 99999)}", randint(1,4), desc), ),
+                location_id=location_id,
                 instance_name="test",
             )
-    gen_data()
-    gen_entries()
-    print(db.search_entries(instance_name="test"))
-    db.rename_location(id=6, name="переименование", instance_name="test")
-    print(db.search_entries(instance_name="test"))
+    # gen_data()
+    # gen_entries()
+    db.move_entries(location_from_id=19, location_to_id=15)
+    # print(db.search_entries(instance_name="test"))
+    # db.rename_location(id=6, name="переименование", instance_name="test")
+    # print(db.search_entries(instance_name="test"))
     # db.add_entry(f"11664781", 2, quantity=5, description_text="химия")
     # db.add_entry(f"11664781", 2, quantity=1, description_text="очень тяжело, ldf, ldf")
     # db.add_entry(f"11664781", location_id=1, quantity=4, description_text="хрупкое, test, test, test, test, test, test, test")
