@@ -150,7 +150,7 @@ class DataBase:
 
     def move_entries(self, location_to_id, entry_ids=None, location_from_id=None):
         with self.Session.begin() as session:
-            entries = session.query(Entry).filter(Entry.location_id == location_from_id)
+            entries = session.query(Entry)
             if location_from_id:
                 entries = entries.filter(Entry.location_id == location_from_id)
             if entry_ids:
@@ -196,14 +196,12 @@ if __name__ == "__main__":
             "закончились идеи",
         )
         tmp = db.get_locations(instance_name="test")
-        print(tmp)
         # for item in db.get_locations():
-            # print(item)
         for _ in range(30):
             location_name, location_id = choice(tmp)
-            desc = None if randint(0,1) else choice(example_descriptions)
+            desc = None if randint(0, 1) else choice(example_descriptions)
             db.add_entries(
-                things=((f"115{randint(00000, 99999)}", randint(1,4), desc), ),
+                things=((f"115{randint(00000, 99999)}", randint(1, 4), desc), ),
                 location_id=location_id,
                 instance_name="test",
             )
@@ -215,6 +213,6 @@ if __name__ == "__main__":
     # print(db.search_entries(instance_name="test"))
     # db.add_entry(f"11664781", 2, quantity=5, description_text="химия")
     # db.add_entry(f"11664781", 2, quantity=1, description_text="очень тяжело, ldf, ldf")
-    # db.add_entry(f"11664781", location_id=1, quantity=4, description_text="хрупкое, test, test, test, test, test, test, test")
+    # db.add_entry(f"11664781", location_id=1, quantity=4, description_text="хрупкое, test, test")
     # print("Wrong id", db.search_entries("777777", instance_name="123"))
     # print("Right id", db.search_entries("777777", instance_name="test_user"))

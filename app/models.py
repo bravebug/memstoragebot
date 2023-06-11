@@ -94,7 +94,7 @@ class Entry(Base):
     # user_id:    Mapped[str]         = mapped_column(index=True)
     # text:       Mapped[str]         = mapped_column(index=True)
     # user_id:    Mapped[int]         = mapped_column(ForeignKey("user_table.id"))
-    # # datetime:   Mapped[DateTime]    = mapped_column(DateTime, default=datetime.utcnow) # верный тип объекта?
+    # datetime:   Mapped[DateTime]    = mapped_column(DateTime, default=datetime.utcnow) # верный тип объекта?
 
 
 class InstanceConfig(Base):

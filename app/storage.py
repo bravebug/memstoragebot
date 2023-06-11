@@ -1,9 +1,6 @@
-import typing
 from uuid import uuid4
 from pprint import pprint
 from datetime import datetime
-
-# import ipdb
 
 
 class TempSorage():

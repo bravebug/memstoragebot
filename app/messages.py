@@ -33,6 +33,7 @@ MESSAGES = {
     'location_removed':                                 '<i>Удалила расположение</i> <b>"{location_name}"</b>',
     'manage_locations_command_menu_item_description':   'Управление хранилещем',
     'memory_is_empty':                                  '<i>Моя память сейчас пуста</i>',
+    'move_entries_icon':                                '🚀',
     'move_entries':                                     'Переместить записи',
     'name_changed':                                     '<i> Имя изменено!:</i>',
     'name_is_taken':                                    'Имя "{name}" уже используется',

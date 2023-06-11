@@ -23,8 +23,6 @@ from utils import remove_extra_spaces as clear_text
 import inspect
 import re
 
-import pdb
-
 logging.basicConfig(level=logging.INFO)
 conf = make_config()
 bot = Bot(token=conf.TOKEN, parse_mode="HTML")
@@ -79,7 +77,6 @@ async def setup_bot_commands(dispatcher):
 
 @dp.message_handler(Text(equals=BUTTON_CANCEL_TEXT, ignore_case=True), state='*')
 async def cancel_handler(message: types.Message, state: FSMContext):
-    current_state = await state.get_state()
     await state.finish()
     await message.reply(
         text=MESSAGES['cancelled'],
@@ -128,7 +125,7 @@ async def manage_location(message: types.Message, state: FSMContext, location):
             types.InlineKeyboardButton(
                 text=MESSAGES['move_entries'],
                 callback_data=batch.add(
-                    partial(move_entries, message, state, location=location)
+                    partial(move_entries, message, location=location)
                 )
             )
         )
@@ -173,11 +170,12 @@ async def manage_locations(message: types.Message, state: FSMContext):
         )
 
 
-async def move_entries(message: types.Message, state: FSMContext, location=None, entry_ids=None):
+async def move_entries(message: types.Message, location=None, entry_ids=None):
     if not (locations := db.get_locations(message.chat.id)):
         await message.reply(MESSAGES['need_location_msg'])
     else:
         kb = types.InlineKeyboardMarkup(row_width=3)
+        location_from_id = location[0] if location else None
         with temp_storage.batch(message.chat.id, message.from_id) as batch:
             for name, i in locations:
                 kb.insert(
@@ -186,7 +184,12 @@ async def move_entries(message: types.Message, state: FSMContext, location=None,
                         callback_data=batch.add(
                             partial(
                                 action_with_output,
-                                partial(db.move_entries, location_from_id=location[0], entry_ids=entry_ids, location_to_id=i),
+                                partial(
+                                    db.move_entries,
+                                    location_from_id=location_from_id,
+                                    entry_ids=entry_ids,
+                                    location_to_id=i,
+                                ),
                                 f'{MESSAGES["successful_action_icon"]} {MESSAGES["entries_moved"]}'
                             )
                         )
@@ -347,7 +350,10 @@ async def add_entry_process(message: types.Message, state: FSMContext):
                     entry_name, quantity_text, description = split_asterisk_and_sharp(entry)
                     if not re.match(ITEM_NAME_ADD_PATTERN, entry_name):
                         await message.reply(
-                            text=MESSAGES['invalid_entry_msg'].format(invalid_entry=entry.strip(), pattern=ITEM_NAME_ADD_PATTERN.pattern),
+                            text=MESSAGES['invalid_entry_msg'].format(
+                                invalid_entry=entry.strip(),
+                                pattern=ITEM_NAME_ADD_PATTERN.pattern,
+                            ),
                         )
                         continue
                     if quantity_text:
@@ -389,8 +395,16 @@ async def add_entry_process(message: types.Message, state: FSMContext):
                                 callback_data=batch.add(
                                     partial(
                                         action_with_output,
-                                        partial(db.add_entries, things=correct_entries, instance_name=message.chat.id, location_id=i),
-                                        f'{MESSAGES["successful_action_icon"]} {MESSAGES["added"]}\n{correct_entries_listing}\n➡️ <b>{name}</b>\n',
+                                        partial(
+                                            db.add_entries,
+                                            things=correct_entries,
+                                            instance_name=message.chat.id,
+                                            location_id=i,
+                                        ),
+                                        (
+                                            f'{MESSAGES["successful_action_icon"]} {MESSAGES["added"]}\n'
+                                            f'{correct_entries_listing}\n➡️ <b>{name}</b>\n'
+                                        ),
                                     )
                                 )
                             )
@@ -495,8 +509,8 @@ async def action_with_output(action, output):
     return output, None
 
 
-async def search_entries(entry_name, chat, user, temp_storage):
-    entries = db.search_entries(equals=entry_name, instance_name=chat)
+async def search_entries(message: types.Message, entry_name):
+    entries = db.search_entries(equals=entry_name, instance_name=message.chat.id)
 
     correct_entries_list = []
     for i, name, location, quantity, description in entries:
@@ -513,17 +527,26 @@ async def search_entries(entry_name, chat, user, temp_storage):
         correct_entries_list.append(correct_entry)
     output_entries = "\n".join(correct_entries_list)
     output = f'<i>{entries[0][1]}</i>:\n{output_entries}'
-    kb = types.InlineKeyboardMarkup(row_width=3)
-    with temp_storage.batch(chat, user) as batch:
+    kb = types.InlineKeyboardMarkup(row_width=1)
+    entry_ids = [item[0] for item in entries]
+    with temp_storage.batch(message.chat.id, message.from_id) as batch:
         kb.insert(
             types.InlineKeyboardButton(
                 text=BUTTON_REMOVE_TEXT,
                 callback_data=batch.add(
                     partial(
                         action_with_output,
-                        partial(db.remove_entries_by_ids, (item[0] for item in entries)),
+                        partial(db.remove_entries_by_ids, entry_ids),
                         f'{output}\n{MESSAGES["removed"]}',
                     )
+                )
+            )
+        )
+        kb.insert(
+            types.InlineKeyboardButton(
+                text=f'{MESSAGES["move_entries_icon"]} {MESSAGES["move_entries"]}',
+                callback_data=batch.add(
+                    partial(move_entries, message, entry_ids=entry_ids)
                 )
             )
         )
@@ -540,49 +563,53 @@ async def search_entries(entry_name, chat, user, temp_storage):
 
 @dp.message_handler()
 async def search(message: types.Message):
-    for word in message.text.split():
-        if re.match(ITEM_NAME_SEARCH_PATTERN, word):
-            entries_names = db.search_things(search_string=word, instance_name=message.chat.id)
-            entries_names_len = len(entries_names)
-            if not entries_names:
-                await message.reply(
-                    text=MESSAGES['thing_not_found'],
-                )
-            else:
-                if entries_names_len > 5:
+    for word in re.findall(ITEM_NAME_SEARCH_PATTERN, message.text):
+        entries_names = db.search_things(search_string=word, instance_name=message.chat.id)
+        if not entries_names:
+            await message.reply(
+                text=MESSAGES['thing_not_found'],
+            )
+        else:
+            match len(entries_names):
+                case l if l > 5:
                     await message.reply(
                         text=MESSAGES['request exactly'],
                     )
-                else:
-                    if entries_names_len == 1:
-                        entry_name = entries_names[0][0]
-                        output, kb = await search_entries(entry_name, message.chat.id, message.from_id, temp_storage)
-                        await message.reply(
-                            text=f'{MESSAGES["found"]} {output}',
-                            reply_markup=kb,
-                        )
-                    else:
-                        kb = types.InlineKeyboardMarkup(row_width=2)
-                        with temp_storage.batch(message.chat.id, message.from_id) as batch:
-                            for name in entries_names:
-                                kb.insert(
-                                    types.InlineKeyboardButton(
-                                        text=name[0],
-                                        callback_data=batch.add(
-                                            partial(
-                                                search_entries,
-                                                entry_name=name[0],
-                                                chat=message.chat.id,
-                                                user=message.from_id,
-                                                temp_storage=temp_storage,
-                                            )
+                case 1:
+                    entry_name = entries_names[0][0]
+                    output, kb = await search_entries(message, entry_name)
+                    await message.reply(
+                        text=f'{MESSAGES["found"]} {output}',
+                        reply_markup=kb,
+                    )
+                case _:
+                    kb = types.InlineKeyboardMarkup(row_width=2)
+                    with temp_storage.batch(message.chat.id, message.from_id) as batch:
+                        for name in entries_names:
+                            kb.insert(
+                                types.InlineKeyboardButton(
+                                    text=name[0],
+                                    callback_data=batch.add(
+                                        partial(
+                                            search_entries,
+                                            message=message,
+                                            entry_name=name[0],
                                         )
                                     )
                                 )
-                        await message.reply(
-                            text=MESSAGES['choose'],
-                            reply_markup=kb,
+                            )
+                        kb.add(
+                            types.InlineKeyboardButton(
+                                text=BUTTON_CANCEL_TEXT,
+                                callback_data=batch.add(
+                                    partial(action_with_output, None, MESSAGES['cancelled'])
+                                )
+                            )
                         )
+                    await message.reply(
+                        text=MESSAGES['choose'],
+                        reply_markup=kb,
+                    )
 
 
 @dp.callback_query_handler()

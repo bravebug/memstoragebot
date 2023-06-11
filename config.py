@@ -26,8 +26,9 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_DATABASE_DEPLOYMENT_KEY = os.environ.get('DEPLOYMENT_KEY') or "memstoragebot secret"
 
-    RE_ITEM_ADD_FORMAT = r'^[\d]{7,8}$'
-    RE_ITEM_SEARCH_FORMAT = r'^[\d]{4,8}$'
+    RE_ITEM_ADD_FORMAT = r'^\d{7,8}$'
+    RE_ITEM_SEARCH_FORMAT = r'\d{4,8}'
+    # RE_ITEM_SEARCH_FORMAT = r'\w+'
     SEPARATORS = r'[,;\n\t]'
 
 
