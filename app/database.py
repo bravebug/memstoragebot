@@ -67,8 +67,11 @@ class DataBase:
         )
         if not entry.quantity:
             entry.quantity = quantity
-        else:
+        elif entry.quantity + quantity >= 1:
             entry.quantity += quantity
+        else:
+            session.delete(entry)
+            return
         if description_text and (description_text := self.clear_text(description_text)):
             if entry.description and entry.description.text != description_text:
                 description_text = f"{entry.description.text}, {description_text}"
@@ -148,7 +151,7 @@ class DataBase:
 
     def move_entries(self, location_to_id, entry_ids=None, location_from_id=None):
         with self.Session.begin() as session:
-            entries = session.query(Entry).entries.filter(Entry.location_id != location_to_id)
+            entries = session.query(Entry).filter(Entry.location_id != location_to_id)
             if location_from_id:
                 entries = entries.filter(Entry.location_id == location_from_id)
             if entry_ids:

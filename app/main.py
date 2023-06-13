@@ -38,7 +38,6 @@ db = DataBase(
 storage = MemoryStorage()
 dp = Dispatcher(bot, storage=storage)
 temp_storage = TempStorage()
-input_state = {}
 
 ITEM_NAME_ADD_PATTERN = re.compile(conf.RE_ITEM_ADD_FORMAT)
 ITEM_NAME_SEARCH_PATTERN = re.compile(conf.RE_ITEM_SEARCH_FORMAT)
