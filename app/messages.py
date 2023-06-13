@@ -7,6 +7,8 @@ MESSAGES = {
     'added_entry_template':                             '<b>{name} =</b> {quantity} {boxes}{description_formated}',
     'box':                                              '📦',
     'button_broken':                                    '<i>Поздно: эта кнопка уже сломана!</i>',
+    'invalid_chat_id':                                  '<i>Ах ты хаккер!!!</i>',
+    'invalid_user_id':                                  '<i>"Это не твоя кнопка!!!</i>',
     'cancel':                                           'Отмена',
     'cancel_icon':                                      '❌',
     'cancelled':                                        '<i>Отменила!</i>',

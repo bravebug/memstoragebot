@@ -1,6 +1,13 @@
 #!/usr/bin/env python
 import logging
 
+from config import make_config
+from database import DataBase
+from messages import MESSAGES
+from storage import TempStorage, DataNotFoundError, InstanceIdMismatchError, UserIdMismatchError
+from utils import remove_extra_spaces as clear_text
+from utils import split_asterisk_and_sharp
+
 from aiogram import Bot, Dispatcher, executor, types
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher import FSMContext
@@ -8,20 +15,16 @@ from aiogram.dispatcher.filters import Command, Text
 from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.types import BotCommand
 from aiogram.types.input_file import InputFile
-from config import make_config
 from csv import writer
-from database import DataBase
 from datetime import datetime
 from functools import partial
 from io import StringIO
-from messages import MESSAGES
 from random import choice
-from storage import TempSorage
 from typing import IO, Iterable
-from utils import split_asterisk_and_sharp
-from utils import remove_extra_spaces as clear_text
 import inspect
 import re
+
+from pprint import pprint
 
 logging.basicConfig(level=logging.INFO)
 conf = make_config()
@@ -34,7 +37,7 @@ db = DataBase(
     )
 storage = MemoryStorage()
 dp = Dispatcher(bot, storage=storage)
-temp_storage = TempSorage()
+temp_storage = TempStorage()
 input_state = {}
 
 ITEM_NAME_ADD_PATTERN = re.compile(conf.RE_ITEM_ADD_FORMAT)
@@ -616,7 +619,14 @@ async def search(message: types.Message):
 async def callback_handler(callback: types.CallbackQuery):
     msg = callback.message.reply_to_message
     try:
-        action = temp_storage.get(callback.data, chat=msg.chat.id, user=msg.from_id)
+        action = temp_storage.pop(callback.data, chat=msg.chat.id, user=msg.from_id)
+    except DataNotFoundError:
+        await callback.message.edit_text(f'{callback.message.text}\n{MESSAGES["button_broken"]}')
+    except InstanceIdMismatchError:
+        await callback.message.edit_text(f'{callback.message.text}\n{MESSAGES["invalid_chat_id"]}')
+    except UserIdMismatchError:
+        await callback.message.edit_text(f'{callback.message.text}\n{MESSAGES["invalid_user_id"]}')
+    else:
         output = None
         kb = None
         if action:
@@ -631,10 +641,6 @@ async def callback_handler(callback: types.CallbackQuery):
                 )
             else:
                 await callback.message.delete()
-        else:
-            await callback.message.edit_text(f'{callback.message.text}\n{MESSAGES["button_broken"]}')
-    except KeyError:
-        await callback.message.edit_text(f'{callback.message.text}\n{MESSAGES["button_broken"]}')
 
 
 if __name__ == '__main__':

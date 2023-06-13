@@ -1,11 +1,12 @@
 #!/usr/bin/env python
 
-from datetime import datetime
 from models import Description, Entry, Instance, InstanceConfig, LocationName, Location, Thing, NoResultFound
 from models import delete, select, update, create_session
-from typing import Callable
+
+from datetime import datetime
 from functools import lru_cache
 from hashlib import blake2s
+from typing import Callable
 
 
 class DataBase:
@@ -31,8 +32,6 @@ class DataBase:
         except NoResultFound:
             item = model(**params)
             session.add(item)
-        except AttributeError as ex:
-            print(f"{'#'*80}\n{ex}\n{'#'*80}")
         finally:
             return item
 
@@ -47,7 +46,6 @@ class DataBase:
                 model=Location,
                 session=session,
             )
-            return location
 
     def rename_location(self, id: str, name: str, instance_name: str):
         instance_name = self.hasher(instance_name)
@@ -150,7 +148,7 @@ class DataBase:
 
     def move_entries(self, location_to_id, entry_ids=None, location_from_id=None):
         with self.Session.begin() as session:
-            entries = session.query(Entry)
+            entries = session.query(Entry).entries.filter(Entry.location_id != location_to_id)
             if location_from_id:
                 entries = entries.filter(Entry.location_id == location_from_id)
             if entry_ids:

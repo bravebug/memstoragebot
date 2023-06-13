@@ -3,24 +3,46 @@ from pprint import pprint
 from datetime import datetime
 
 
-class TempSorage():
+class DataNotFoundError(Exception):
+    """Raised when there is no data in the storage"""
+
+    def __init__(self, message="There is no data in the storage"):
+        self.message = message
+        super().__init__(self.message)
+
+
+class InstanceIdMismatchError(Exception):
+    """Raised when an invalid chat ID is provided"""
+
+    def __init__(self, message="Invalid chat ID"):
+        self.message = message
+        super().__init__(self.message)
+
+
+class UserIdMismatchError(Exception):
+    """Raised when an invalid user ID is provided"""
+
+    def __init__(self, message="Invalid user ID"):
+        self.message = message
+        super().__init__(self.message)
+
+
+class TempStorage():
     def __init__(self):
         self.__data = dict()
-        self.__data_date = dict()
-        self.__data_batchs = dict()
-        self.__current_batch = []
+        self.__current_ids_batch = set()
         self.__current_chat = None
         self.__current_user = None
         self.__batching = False
 
     def __enter__(self):
         self.__batching = True
-        self.__current_batch = []
+        self.__current_ids_batch = set()
         return self
 
     def __exit__(self, *_):
         self.__batching = False
-        self.__current_batch = []
+        self.__current_ids_batch = set()
         self.__current_chat = None
         self.__current_user = None
 
@@ -29,48 +51,54 @@ class TempSorage():
         self.__current_user = user
         return self
 
+    def add(self, data, chat=None, user=None):
+        chat = chat or self.__current_chat
+        user = user or self.__current_user
+        uid = str(uuid4())
+        self.__data[uid] = dict(
+            data=data,
+            chat=chat,
+            user=user,
+            created=datetime.utcnow(),
+        )
+        self.__current_ids_batch.add(uid)
+        self.__data[uid].update(
+            batch=self.__current_ids_batch
+        )
+        if not self.__batching:
+            self.__current_ids_batch = set()
+        return uid
+
     def get(self, key, chat=None, user=None):
         chat = chat or self.__current_chat
         user = user or self.__current_user
-        try:
-            data = self.__data[chat][user][key]
-        except KeyError:
-            return
-        return data
-
-    def remove(self, key, chat=None, user=None):
-        chat = chat or self.__current_chat
-        user = user or self.__current_user
-        if uuids := self.__data_batchs[key]:
-            for uuid in uuids:
-                del self.__data[chat][user][uuid]
-                del self.__data_batchs[uuid]
+        if not (dataset := self.__data.get(key)):
+            raise DataNotFoundError()
         else:
-            del self.__data[chat][user][key]
+            if not dataset.get('chat') == chat:
+                raise InstanceIdMismatchError()
+            elif not dataset.get('user') == user:
+                raise UserIdMismatchError()
+            else:
+                return dataset.get('data')
+
+    def remove(self, key):
+        dataset = self.__data.get(key)
+        if uids := dataset.get('batch'):
+            for uid in uids:
+                del self.__data[uid]
 
     def pop(self, key, chat=None, user=None):
         chat = chat or self.__current_chat
         user = user or self.__current_user
         data = self.get(key, chat, user)
-        self.remove(key, chat, user)
+        if data:
+            self.remove(key)
         return data
-
-    def add(self, value, chat=None, user=None):
-        chat = chat or self.__current_chat
-        user = user or self.__current_user
-        uuid = str(uuid4())
-        data_chat = self.__data[chat] = self.__data.get(chat, dict())
-        data_user = data_chat[user] = data_chat.get(user, dict())
-        data_user[uuid] = value
-        self.__data_date[datetime.utcnow()] = uuid
-        if self.__batching:
-            self.__current_batch.append(uuid)
-            self.__data_batchs[uuid] = self.__current_batch
-        return uuid
 
     @property
     def data(self):
-        return self.__data, self.__data_date, self.__data_batchs,
+        return self.__data
 
     @data.setter
     def data(self, value):
@@ -78,12 +106,4 @@ class TempSorage():
 
 
 if __name__ == "__main__":
-    temp_storage = TempSorage()
-    with temp_storage.batch() as batch:
-        batch.add("without chat and user")
-        batch.add("without chat with user", user="user1")
-    temp_storage.add("with chat without user", chat="chat1")
-    temp_storage.add("with chat1 and user1", chat="chat1", user="user1")
-    test_uuid = temp_storage.add("with chat2 and user2", chat="chat2", user="user2")
-    pprint(temp_storage.data)
-    pprint(temp_storage.get(test_uuid, chat="chat2", user="user2"))
+    pass
