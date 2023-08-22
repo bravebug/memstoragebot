@@ -38,7 +38,7 @@ export TOKEN='Insert your Telegram bot API token here'
 
 5. Запуск Бота
 ```bash
-python3 main.py
+python3 app/main.py
 ```
 
 ## Предложение или сообщение об ошибке
